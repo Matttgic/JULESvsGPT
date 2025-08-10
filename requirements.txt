@@ -1,0 +1,4 @@
+# Fichier : requirements.txt
+
+requests
+Flask
