@@ -4,45 +4,62 @@ from flask import Flask, render_template, request, json
 from datetime import datetime
 import api_client
 import prediction_engine
-from config import MAJOR_LEAGUES, CURRENT_SEASON, BOOKMAKER_ID
+from config import CURRENT_SEASON, BOOKMAKER_ID
 
 app = Flask(__name__)
+
+# Liste des championnats déplacée ici pour plus de propreté et de sécurité
+MAJOR_LEAGUES = {
+    "UEFA Champions League": 2, "UEFA Europa League": 3, "Euro Championship": 4,
+    "Africa Cup of Nations": 6, "World Cup - Women": 8, "Friendlies": 10,
+    "CONMEBOL Sudamericana": 11, "CONMEBOL Libertadores": 13, "FIFA Club World Cup": 15,
+    "CONCACAF Champions League": 16, "CONCACAF Gold Cup": 22, "Africa Cup of Nations Qualification": 36,
+    "UEFA U21 Championship": 38, "Premier League": 39, "Championship": 40, "FA Cup": 45,
+    "Ligue 1": 61, "Ligue 2": 62, "Feminine Division 1": 64, "Coupe de France": 66,
+    "Serie A (Brazil)": 71, "Bundesliga": 78, "2. Bundesliga": 79, "DFB Pokal": 81,
+    "Eredivisie": 88, "Primeira Liga (Portugal)": 94, "Eliteserien (Norway)": 103,
+    "Ekstraklasa (Poland)": 106, "Premier (Wales)": 110, "Allsvenskan (Sweden)": 113,
+    "Superligaen (Denmark)": 119, "Serie A": 135, "Serie B": 136, "Coppa Italia": 137,
+    "La Liga": 140, "Segunda División": 141, "Jupiler Pro League": 144,
+    "Premier (Iceland)": 164, "A PFG (Bulgaria)": 172, "Premiership (Scotland)": 179,
+    "Ligue 1 (Algeria)": 186, "Super League (Switzerland/Greece)": 197, "Super Lig (Turkey)": 203,
+    "Prva HNL (Croatia)": 210, "Tipp3 Bundesliga (Austria)": 218, "Primera A (Colombia)": 239,
+    "Serie A (Ecuador)": 242, "Veikkausliiga (Finland)": 244, "Primera Division - Apertura (Paraguay)": 250,
+    "Primera Division - Clausura (Paraguay)": 252, "Major League Soccer": 253,
+    "National Division (Luxembourg)": 261, "Liga MX": 262, "Primera Division (Chile)": 265,
+    "NB I (Hungary)": 271, "Liga I (Romania)": 283, "Super Liga (Serbia)": 286,
+    "Premijer Liga (Bosnia)": 315, "Erovnuli Liga (Georgia)": 327, "Meistriliiga (Estonia)": 329,
+    "Super Liga (Slovakia)": 332, "Premier League (Ukraine)": 333, "Czech Liga": 345,
+    "First League (Montenegro)": 355, "Premier Division (Ireland)": 357, "A Lyga (Lithuania)": 362,
+    "Virsliga (Latvia)": 365, "1. SNL (Slovenia)": 373, "Divizia Națională (Moldova)": 394,
+    "Premiership (Northern Ireland)": 408, "UEFA Champions League Women": 525, "Community Shield": 528,
+    "Super Cup (Germany)": 529, "UEFA Super Cup": 531, "CONMEBOL Recopa": 541,
+    "Super Cup (Spain)": 556, "Friendlies Women": 666, "UEFA Championship - Women": 743,
+    "Leagues Cup": 772, "UEFA Europa Conference League": 848, "UEFA U21 Championship - Qualification": 850,
+    "CONCACAF Gold Cup - Qualification": 858, "UEFA Nations League - Women": 1040,
+    "UEFA Championship - Women - Qualification": 1083, "FIFA Club World Cup - Play-In": 1186
+}
 
 # Permet d'utiliser `tojson` dans les templates pour passer des données complexes
 app.jinja_env.filters['tojson'] = json.dumps
 
 @app.route('/')
 def index():
-    """Affiche la page d'accueil avec le formulaire de sélection."""
-    # Trie les ligues par ordre alphabétique pour un affichage propre
     sorted_leagues = dict(sorted(MAJOR_LEAGUES.items()))
     return render_template('index.html', leagues=sorted_leagues)
 
 @app.route('/fixtures', methods=['POST'])
 def show_fixtures():
-    """Affiche les matchs pour la ligue et la date sélectionnées."""
     league_id = request.form['league_id']
     date_str = request.form['date']
-    
     fixtures_data = api_client.get_fixtures_for_date(date_str, league_id, CURRENT_SEASON)
-    
-    fixtures = []
-    if fixtures_data and fixtures_data.get('response'):
-        fixtures = fixtures_data['response']
-        
+    fixtures = fixtures_data.get('response', [])
     return render_template('fixtures.html', fixtures=fixtures, date=date_str)
 
 @app.route('/result', methods=['POST'])
 def show_result():
-    """Calcule et affiche la prédiction et les cotes pour un match."""
-    # On récupère les données du match, qui ont été passées en JSON
-    fixture_data_str = request.form['fixture_data']
-    fixture = json.loads(fixture_data_str)
-    
-    # 1. Obtenir la prédiction de notre moteur
+    fixture = json.loads(request.form['fixture_data'])
     prediction = prediction_engine.predict_match(fixture)
-    
-    # 2. Obtenir les cotes de Bet365
     odds_data = api_client.get_odds(fixture['fixture']['id'], BOOKMAKER_ID)
     
     parsed_odds = None
@@ -58,15 +75,9 @@ def show_result():
                     }
                     break
         except (IndexError, KeyError):
-            # Les cotes n'ont pas pu être parsées, on laisse parsed_odds à None
             pass
 
     return render_template('result.html', fixture=fixture, prediction=prediction, odds=parsed_odds)
 
 if __name__ == '__main__':
-    # Pour lancer l'application en local :
-    # 1. Dans le terminal, exécutez `export FLASK_APP=app.py` (sur Mac/Linux) ou `set FLASK_APP=app.py` (sur Windows)
-    # 2. Puis `export FLASK_ENV=development` ou `set FLASK_ENV=development`
-    # 3. Enfin `flask run`
-    # Alternative simple : exécutez `python app.py` directement.
     app.run(host='0.0.0.0', port=5001, debug=True)
