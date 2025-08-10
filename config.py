@@ -4,7 +4,7 @@
 
 # IMPORTANT : Remplacez "VOTRE_CLE_API" par votre clé API personnelle
 # que vous pouvez obtenir sur RapidAPI.
-API_KEY = "VOTRE_CLE_API"
+API_KEY = "e1e76b8e3emsh2445ffb97db0128p158afdjsnb3175ce8d916"
 
 # URL de base de l'API v3
 API_HOST = "api-football-v1.p.rapidapi.com"
