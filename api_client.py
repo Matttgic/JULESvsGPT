@@ -1,3 +1,4 @@
+
 # Fichier : api_client.py
 
 """
@@ -66,3 +67,8 @@ def get_odds(fixture_id, bookmaker_id):
     """Récupère les cotes pour un match et un bookmaker donnés."""
     params = {'fixture': fixture_id, 'bookmaker': bookmaker_id}
     return get_data("odds", params=params)
+
+def get_fixture_result(fixture_id):
+    """Récupère le résultat d'un match terminé."""
+    params = {'id': fixture_id}
+    return get_data("fixtures", params=params)
