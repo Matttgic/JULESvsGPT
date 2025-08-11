@@ -1,4 +1,4 @@
-Fichier : prediction_engine.py
+# Fichier : prediction_engine.py
 
 """
 Moteur de prédiction des résultats de matchs de football.
@@ -15,26 +15,24 @@ def _calculate_h2h_score(h2h_data, home_team_id):
         return home_score
 
     for match in h2h_data['response']:
+        goals_home = match['goals']['home']
+        goals_away = match['goals']['away']
+
+        # On ignore les matchs non terminés
+        if goals_home is None or goals_away is None:
+            continue
+
         winner_id = None
-        # La structure de la réponse pour 'winner' peut être différente
-        if 'winner' in match['teams']['home'] and match['teams']['home']['winner']:
+        if goals_home > goals_away:
             winner_id = match['teams']['home']['id']
-        elif 'winner' in match['teams']['away'] and match['teams']['away']['winner']:
+        elif goals_away > goals_home:
             winner_id = match['teams']['away']['id']
-        
-        # Gestion des cas où 'winner' est un booléen ou l'ID n'est pas présent
-        if winner_id is None:
-             # Tentative de déduire le vainqueur par les buts si 'winner' n'est pas clair
-            if match['goals']['home'] > match['goals']['away']:
-                winner_id = match['teams']['home']['id']
-            elif match['goals']['home'] < match['goals']['away']:
-                winner_id = match['teams']['away']['id']
 
         if winner_id == home_team_id:
-            home_score += 2
-        elif winner_id is None: # Match nul
+            home_score += 2  # Victoire à domicile
+        elif winner_id is None:  # Match nul
             home_score += 1
-        else: # Défaite
+        else:  # Défaite à domicile
             home_score -= 2
             
     return home_score
@@ -48,22 +46,22 @@ def _calculate_form_score(team_id):
         return form_score
 
     for match in last_fixtures['response']:
-        # Logique similaire à H2H pour déterminer le vainqueur
+        goals_home = match['goals']['home']
+        goals_away = match['goals']['away']
+
+        # On ignore les matchs non terminés
+        if goals_home is None or goals_away is None:
+            continue
+
         winner_id = None
-        if match['teams']['home']['winner']:
+        if goals_home > goals_away:
             winner_id = match['teams']['home']['id']
-        elif match['teams']['away']['winner']:
+        elif goals_away > goals_home:
             winner_id = match['teams']['away']['id']
 
-        if winner_id is None:
-            if match['goals']['home'] > match['goals']['away']:
-                winner_id = match['teams']['home']['id']
-            elif match['goals']['home'] < match['goals']['away']:
-                winner_id = match['teams']['away']['id']
-
         if winner_id == team_id:
-            form_score += 2 # Victoire
-        elif winner_id is None: # Match nul
+            form_score += 2  # Victoire
+        elif winner_id is None:  # Match nul
             form_score += 1
         # Aucun point pour une défaite
         
