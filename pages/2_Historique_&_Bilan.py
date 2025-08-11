@@ -1,16 +1,22 @@
 import streamlit as st
 import pandas as pd
+from sqlalchemy import create_engine
 
-st.set_page_config(page_title="Historique & Bilan", page_icon="📊")
+# Fonction pour initialiser la connexion à la base de données et la mettre en cache
+@st.cache_resource
+def get_db_engine():
+    return create_engine("sqlite:///predictions.db")
+
+st.set_page_config(page_title="Historique & Bilan", page_icon="📊", layout="wide")
 
 st.title("📊 Historique & Bilan des Prédictions")
 
-# Initialisation de la connexion à la base de données
-conn = st.connection("predictions_db", type="sql", url="sqlite:///predictions.db")
+engine = get_db_engine()
 
 # Récupération des données
 try:
-    predictions_df = conn.query('SELECT * FROM predictions ORDER BY prediction_ts DESC')
+    with engine.connect() as connection:
+        predictions_df = pd.read_sql('SELECT * FROM predictions ORDER BY prediction_ts DESC', connection)
 
     # --- Bilan ---
     st.header("Bilan Global")
@@ -25,7 +31,7 @@ try:
         predictions_df,
         column_config={
             "id": "ID",
-            "prediction_ts": "Date de Prédiction",
+            "prediction_ts": st.column_config.DatetimeColumn("Date de Prédiction", format="D MMM YYYY, HH:mm"),
             "fixture_id": "ID Match",
             "match_desc": "Match",
             "predicted_outcome": "Prédiction",
@@ -34,7 +40,8 @@ try:
             "odds_away": "Cote Extérieur",
             "status": "Statut"
         },
-        use_container_width=True
+        use_container_width=True,
+        hide_index=True,
     )
 
 except Exception as e:
