@@ -16,30 +16,45 @@ Ce projet a été réalisé par Jules, une IA ingénieure logicielle, dans le ca
 
 ## 🚀 Instructions d'Installation et d'Utilisation
 
-Suivez ces 3 étapes simples pour lancer l'application.
+### Méthode 1 : Utilisation du Script `run.sh` (Recommandé)
 
-### 1. Configurez votre Clé API
+Le moyen le plus simple de lancer l'application est d'utiliser le script `run.sh` fourni.
 
-L'accès à l'API `api-football` nécessite une clé personnelle.
+1.  **Configurez votre clé API** :
+    Le script utilise une variable d'environnement nommée `API_FOOTBALL_KEY`. Vous pouvez la définir de manière permanente dans votre système ou la définir temporairement avant de lancer le script :
+    ```bash
+    export API_FOOTBALL_KEY="VOTRE_CLE_API_PERSONNELLE"
+    ```
+    *Remplacez `VOTRE_CLE_API_PERSONNELLE` par la clé que vous avez obtenue sur [RapidAPI](https://rapidapi.com/api-sports/api/api-football).*
 
-1.  Ouvrez le fichier `config.py`.
-2.  À l'intérieur, trouvez la ligne `API_KEY = "VOTRE_CLE_API"`.
-3.  Remplacez `"VOTRE_CLE_API"` par votre clé personnelle que vous pouvez obtenir sur [RapidAPI](https://rapidapi.com/api-sports/api/api-football).
+2.  **Exécutez le script** :
+    Ouvrez un terminal dans le répertoire du projet et lancez la commande suivante :
+    ```bash
+    ./run.sh
+    ```
+    Le script installera automatiquement les dépendances nécessaires et démarrera le serveur web.
 
-### 2. Installez les Dépendances
+### Méthode 2 : Manuelle
 
-Ce projet utilise des librairies Python externes. Pour les installer, ouvrez un terminal dans le répertoire du projet et exécutez la commande suivante :
-```bash
-pip install -r requirements.txt
-(Cela installera requests et Flask).
+Si vous préférez lancer l'application manuellement, suivez ces étapes.
 
-3. Lancez l'Application Web
-Une fois la configuration et l'installation terminées, lancez le serveur web.
+1.  **Configurez votre clé API** :
+    Définissez la variable d'environnement `API_FOOTBALL_KEY` :
+    ```bash
+    export API_FOOTBALL_KEY="VOTRE_CLE_API_PERSONNELLE"
+    ```
 
-Ouvrez un terminal dans le répertoire du projet.
-Exécutez la commande suivante :
-python app.py
-Le terminal affichera une adresse, probablement http://127.0.0.1:5001. Ouvrez cette adresse dans votre navigateur web pour utiliser l'application. (Pour un usage sur smartphone, si votre téléphone est sur le même réseau WiFi que l'ordinateur qui lance le serveur, vous pourrez accéder à l'application en utilisant l'adresse IP locale de l'ordinateur, par exemple http://192.168.1.XX:5001)
+2.  **Installez les dépendances** :
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+3.  **Lancez l'application** :
+    ```bash
+    python app.py
+    ```
+
+Dans les deux cas, l'application sera accessible à l'adresse `http://127.0.0.1:5001` dans votre navigateur.
 💡 Améliorations Futures Possibles
 Ce projet est une base solide. Voici quelques pistes pour le rendre encore meilleur :
 
