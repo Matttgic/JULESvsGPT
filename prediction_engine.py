@@ -75,7 +75,7 @@ def predict_match(fixture):
         fixture (dict): Un dictionnaire représentant un match, venant de l'API.
         
     Returns:
-        str: La prédiction ("Victoire Domicile", "Match Nul", "Victoire Extérieur").
+        tuple[str, list[str]]: La prédiction et une liste de logs d'analyse.
     """
     home_team_id = fixture['teams']['home']['id']
     away_team_id = fixture['teams']['away']['id']
@@ -83,28 +83,30 @@ def predict_match(fixture):
     home_team_name = fixture['teams']['home']['name']
     away_team_name = fixture['teams']['away']['name']
 
-    print(f"\n--- Analyse du match : {home_team_name} vs {away_team_name} ---")
+    analysis_logs = []
+    analysis_logs.append(f"--- Analyse du match : {home_team_name} vs {away_team_name} ---")
 
     # 1. Calcul du score de forme
     home_form_score = _calculate_form_score(home_team_id)
     away_form_score = _calculate_form_score(away_team_id)
-    print(f"Score de Forme : {home_team_name} ({home_form_score}) vs {away_team_name} ({away_form_score})")
+    analysis_logs.append(f"Score de Forme : {home_team_name} ({home_form_score}) vs {away_team_name} ({away_form_score})")
     
     # 2. Calcul du score H2H (Head-to-Head)
     h2h_data = api_client.get_head_to_head(home_team_id, away_team_id)
     h2h_score = _calculate_h2h_score(h2h_data, home_team_id)
-    print(f"Score H2H (avantage {home_team_name}): {h2h_score}")
+    analysis_logs.append(f"Score H2H (avantage {home_team_name}): {h2h_score}")
 
     # 3. Calcul du score final et prédiction
     final_home_score = (home_form_score * 0.7) + (h2h_score * 0.3)
     final_away_score = away_form_score * 0.7
-
-    print(f"Score Final Pondéré : {home_team_name} ({final_home_score:.2f}) vs {away_team_name} ({final_away_score:.2f})")
+    analysis_logs.append(f"Score Final Pondéré : {home_team_name} ({final_home_score:.2f}) vs {away_team_name} ({final_away_score:.2f})")
 
     # Logique de décision
     if final_home_score > final_away_score + 1:
-        return f"Victoire {home_team_name}"
+        prediction = f"Victoire {home_team_name}"
     elif final_away_score > final_home_score + 1:
-        return f"Victoire {away_team_name}"
+        prediction = f"Victoire {away_team_name}"
     else:
-        return "Match Nul" 
+        prediction = "Match Nul"
+
+    return prediction, analysis_logs
