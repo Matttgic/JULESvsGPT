@@ -1,10 +1,3 @@
-Non, avec votre code actuel, **les résultats ne se mettent pas automatiquement**. La colonne `status` reste toujours à `'PENDING'`.
-
-## 🔧 **Il faut ajouter un système de mise à jour des résultats**
-
-Voici le code amélioré avec mise à jour automatique des résultats :
-
-```python
 import streamlit as st
 import pandas as pd
 from sqlalchemy import create_engine, text
@@ -72,17 +65,11 @@ def update_match_results():
                         session.execute(
                             text("""
                                 UPDATE predictions 
-                                SET status = :status, 
-                                    actual_result = :actual_result,
-                                    home_score = :home_score,
-                                    away_score = :away_score
+                                SET status = :status
                                 WHERE fixture_id = :fixture_id
                             """),
                             {
                                 "status": status,
-                                "actual_result": actual_result,
-                                "home_score": home_goals,
-                                "away_score": away_goals,
                                 "fixture_id": fixture_id
                             }
                         )
@@ -101,13 +88,20 @@ def update_db_schema():
     engine = get_db_engine()
     with engine.connect() as connection:
         try:
+            # Vérifier si les colonnes existent déjà
+            result = connection.execute(text("PRAGMA table_info(predictions)"))
+            columns = [row[1] for row in result.fetchall()]
+            
             # Ajouter les nouvelles colonnes si elles n'existent pas
-            connection.execute(text("ALTER TABLE predictions ADD COLUMN actual_result TEXT"))
-            connection.execute(text("ALTER TABLE predictions ADD COLUMN home_score INTEGER"))
-            connection.execute(text("ALTER TABLE predictions ADD COLUMN away_score INTEGER"))
+            if 'actual_result' not in columns:
+                connection.execute(text("ALTER TABLE predictions ADD COLUMN actual_result TEXT"))
+            if 'home_score' not in columns:
+                connection.execute(text("ALTER TABLE predictions ADD COLUMN home_score INTEGER"))
+            if 'away_score' not in columns:
+                connection.execute(text("ALTER TABLE predictions ADD COLUMN away_score INTEGER"))
             connection.commit()
-        except Exception:
-            # Les colonnes existent déjà
+        except Exception as e:
+            # Les colonnes existent déjà ou autre erreur
             pass
 
 # --- UI ---
@@ -127,19 +121,25 @@ with col2:
             updated = update_match_results()
             if updated > 0:
                 st.success(f"✅ {updated} résultats mis à jour !")
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.info("ℹ️ Aucun nouveau résultat à mettre à jour.")
 
 try:
     with engine.connect() as connection:
-        predictions_df = pd.read_sql("""
-            SELECT id, prediction_ts, fixture_id, match_desc, predicted_outcome, 
-                   actual_result, home_score, away_score, odds_home, odds_draw, 
-                   odds_away, status 
-            FROM predictions 
-            ORDER BY prediction_ts DESC
-        """, connection)
+        # Vérifier d'abord quelles colonnes existent
+        result = connection.execute(text("PRAGMA table_info(predictions)"))
+        columns = [row[1] for row in result.fetchall()]
+        
+        # Construire la requête en fonction des colonnes disponibles
+        base_columns = "id, prediction_ts, fixture_id, match_desc, predicted_outcome, odds_home, odds_draw, odds_away, status"
+        
+        if 'actual_result' in columns:
+            query = f"SELECT {base_columns}, actual_result FROM predictions ORDER BY prediction_ts DESC"
+        else:
+            query = f"SELECT {base_columns} FROM predictions ORDER BY prediction_ts DESC"
+        
+        predictions_df = pd.read_sql(query, connection)
     
     # --- Bilan Global ---
     st.header("📈 Bilan Global")
@@ -178,8 +178,7 @@ try:
             st.subheader("📊 Répartition des Résultats")
             chart_data = pd.DataFrame({
                 'Statut': ['Correctes', 'Incorrectes', 'En attente'],
-                'Nombre': [correct_predictions, incorrect_predictions, pending_predictions],
-                'Couleur': ['#00ff00', '#ff0000', '#ffff00']
+                'Nombre': [correct_predictions, incorrect_predictions, pending_predictions]
             })
             
             st.bar_chart(chart_data.set_index('Statut')['Nombre'])
@@ -188,7 +187,7 @@ try:
     st.header("📝 Historique des prédictions")
     
     # Filtres
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
     with col1:
         status_filter = st.selectbox(
             "Filtrer par statut", 
@@ -214,27 +213,9 @@ try:
         thirty_days_ago = datetime.now() - timedelta(days=30)
         filtered_df = filtered_df[pd.to_datetime(filtered_df['prediction_ts']) >= thirty_days_ago]
     
-    # Ajout de la colonne Score pour les matchs terminés
-    def format_score(row):
-        if row['status'] in ['CORRECT', 'INCORRECT'] and pd.notna(row['home_score']) and pd.notna(row['away_score']):
-            return f"{int(row['home_score'])} - {int(row['away_score'])}"
-        return "-"
-    
-    filtered_df['score'] = filtered_df.apply(format_score, axis=1)
-    
-    # Fonction pour colorer les lignes selon le statut
-    def color_status(val):
-        if val == 'CORRECT':
-            return 'background-color: #d4edda'  # Vert clair
-        elif val == 'INCORRECT':
-            return 'background-color: #f8d7da'  # Rouge clair
-        elif val == 'PENDING':
-            return 'background-color: #fff3cd'  # Jaune clair
-        return ''
-    
-    # Affichage du tableau avec style
+    # Affichage du tableau
     st.dataframe(
-        filtered_df.style.applymap(color_status, subset=['status']),
+        filtered_df,
         column_config={
             "id": "ID",
             "prediction_ts": st.column_config.DatetimeColumn("Date", format="D MMM YYYY, HH:mm"),
@@ -242,7 +223,6 @@ try:
             "match_desc": "Match",
             "predicted_outcome": "Prédiction",
             "actual_result": "Résultat Réel",
-            "score": "Score",
             "odds_home": st.column_config.NumberColumn("Cote 1", format="%.2f"),
             "odds_draw": st.column_config.NumberColumn("Cote X", format="%.2f"),
             "odds_away": st.column_config.NumberColumn("Cote 2", format="%.2f"),
@@ -255,19 +235,3 @@ try:
 except Exception as e:
     st.warning("La base de données de l'historique est vide ou n'a pas pu être lue. Faites une prédiction pour commencer.")
     st.error(f"Erreur: {e}")
-
-# Auto-refresh tous les jours
-if st.checkbox("🔄 Mise à jour automatique quotidienne des résultats"):
-    st.info("Les résultats seront mis à jour automatiquement chaque jour à l'ouverture de cette page.")
-    # Vérifier si on doit mettre à jour (une fois par jour)
-    last_update_key = "last_results_update"
-    if last_update_key not in st.session_state:
-        st.session_state[last_update_key] = datetime.now().date()
-    
-    if st.session_state[last_update_key] < datetime.now().date():
-        with st.spinner("Mise à jour automatique des résultats..."):
-            updated = update_match_results()
-            st.session_state[last_update_key] = datetime.now().date()
-            if updated > 0:
-                st.success(f"✅ {updated} résultats mis à jour automatiquement !")
-                st.experimental_rerun()
