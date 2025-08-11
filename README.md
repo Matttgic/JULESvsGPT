@@ -55,9 +55,25 @@ Si vous préférez lancer l'application manuellement, suivez ces étapes.
     ```
 
 Dans les deux cas, l'application sera accessible à l'adresse `http://127.0.0.1:5001` dans votre navigateur.
+
+## ☁️ Déploiement Cloud (Recommandé pour Smartphone)
+
+Ce projet est maintenant configuré pour un déploiement continu sur le service cloud **Render**. Une fois déployé, vous obtiendrez une URL publique (`https://nom-de-votre-app.onrender.com`) que vous pourrez utiliser depuis n'importe quel appareil, y compris votre smartphone.
+
+### Comment Déployer sur Render
+
+1.  **Créez un compte** sur [Render.com](https://render.com/).
+2.  **Faites un "Fork"** de ce dépôt sur votre propre compte GitHub.
+3.  Sur le tableau de bord Render, cliquez sur **New > Blueprint Instance**.
+4.  Connectez votre compte GitHub et sélectionnez le dépôt que vous venez de "forker". Render lira automatiquement le fichier `render.yaml` et configurera le service.
+5.  La seule étape manuelle est d'ajouter votre clé API :
+    - Allez dans les **Environment** de votre nouveau service sur Render.
+    - Ajoutez une variable d'environnement avec la clé `API_FOOTBALL_KEY` et collez votre clé API en valeur.
+
+Render déploiera automatiquement l'application. Chaque nouvelle modification poussée sur la branche `main` de votre dépôt sera redéployée automatiquement.
+
 💡 Améliorations Futures Possibles
 Ce projet est une base solide. Voici quelques pistes pour le rendre encore meilleur :
 
-Intégrer plus de données : Classements, statistiques détaillées des joueurs, informations sur les blessés et suspendus.
-Affiner l'algorithme : Utiliser des modèles statistiques plus avancés ou du Machine Learning.
-Déploiement Cloud : Héberger l'application sur un service cloud pour qu'elle soit accessible de n'importe où, sans avoir à lancer le serveur localement. 
+- **Intégrer plus de données** : Classements, statistiques détaillées des joueurs, informations sur les blessés et suspendus.
+- **Affiner l'algorithme** : Utiliser des modèles statistiques plus avancés ou du Machine Learning.
