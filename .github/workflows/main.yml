@@ -24,21 +24,24 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Lancement de l'application (test de démarrage)
+    - name: Lancement de l'application Streamlit (test de démarrage)
       run: |
-        # On lance l'application en arrière-plan
-        # On utilise une fausse clé API car les secrets ne sont pas disponibles pour les PR de forks
-        export API_FOOTBALL_KEY="dummy-key-for-ci"
-        ./run.sh &
+        # On crée un faux fichier secrets pour que l'app ne plante pas au démarrage
+        mkdir -p .streamlit
+        echo '[API_FOOTBALL_KEY]\n"dummy-key-for-ci"' > .streamlit/secrets.toml
+        
+        # On lance l'application en arrière-plan en mode "headless"
+        streamlit run 1_Matchs_du_Jour.py --server.runOnSave=false --server.headless=true &
+        
         # On attend quelques secondes pour voir si le serveur plante
-        sleep 10
-        # On vérifie si le processus est toujours en cours
-        # `ps -ef` liste les processus, `grep` filtre pour notre app, `grep -v grep` enlève le processus grep lui-même
-        if pgrep -f "python app.py"; then
-          echo "L'application a démarré avec succès."
+        sleep 15
+        
+        # On vérifie si le processus Streamlit est toujours en cours
+        if pgrep -f "streamlit run 1_Matchs_du_Jour.py"; then
+          echo "L'application Streamlit a démarré avec succès."
           # On arrête le serveur pour que le workflow puisse se terminer
-          pkill -f "python app.py"
+          pkill -f "streamlit run"
         else
-          echo "Erreur : L'application n'a pas pu démarrer ou a planté."
+          echo "Erreur : L'application Streamlit n'a pas pu démarrer ou a planté."
           exit 1
         fi
