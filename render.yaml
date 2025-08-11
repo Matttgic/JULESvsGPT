@@ -10,4 +10,4 @@ services:
       - key: API_FOOTBALL_KEY
         sync: false # La clé doit être ajoutée manuellement dans le dashboard Render
       - key: PYTHON_VERSION
-        value: 3.9 # Spécifie la version de Python à utiliser
+        value: 3.9.18 # Spécifie la version de Python à utiliser
