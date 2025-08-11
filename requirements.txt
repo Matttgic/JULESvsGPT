@@ -1,3 +1,5 @@
-requests
 streamlit
+sqlalchemy
 pandas
+requests
+python-dotenv
