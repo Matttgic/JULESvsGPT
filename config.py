@@ -2,16 +2,9 @@
 
 # Fichier de configuration
 
-import streamlit as st
-
-# Clé API pour api-football
-# La clé est lue depuis les secrets Streamlit (fichier secrets.toml ou secrets du cloud)
-try:
-    API_KEY = st.secrets["API_FOOTBALL_KEY"]
-except FileNotFoundError:
-    # Permet à l'app de ne pas planter si le fichier secrets.toml n'existe pas
-    # lors d'un premier lancement local, mais les appels API échoueront.
-    API_KEY = "VOTRE_CLE_API_MANQUANTE"
+# IMPORTANT : Remplacez "VOTRE_CLE_API" par votre clé API personnelle
+# que vous pouvez obtenir sur RapidAPI.
+API_KEY = "VOTRE_CLE_API"
 
 # URL de base de l'API v3
 API_HOST = "api-football-v1.p.rapidapi.com"

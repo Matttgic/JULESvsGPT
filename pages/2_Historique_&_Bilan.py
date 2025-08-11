@@ -2,18 +2,18 @@ import streamlit as st
 import pandas as pd
 from sqlalchemy import create_engine
 
-# Fonction pour initialiser la connexion à la base de données et la mettre en cache
+# --- DATABASE ---
 @st.cache_resource
 def get_db_engine():
+    """Crée et met en cache le moteur de base de données SQLAlchemy."""
     return create_engine("sqlite:///predictions.db")
 
+# --- UI ---
 st.set_page_config(page_title="Historique & Bilan", page_icon="📊", layout="wide")
-
 st.title("📊 Historique & Bilan des Prédictions")
 
 engine = get_db_engine()
 
-# Récupération des données
 try:
     with engine.connect() as connection:
         predictions_df = pd.read_sql('SELECT * FROM predictions ORDER BY prediction_ts DESC', connection)
@@ -22,8 +22,7 @@ try:
     st.header("Bilan Global")
     total_predictions = len(predictions_df)
     st.metric(label="Nombre total de prédictions", value=total_predictions)
-    # Note: Le calcul de la précision sera ajouté dans une future étape,
-    # une fois que le script de mise à jour des résultats sera en place.
+    # Note: Le bilan détaillé (précision, etc.) sera ajouté dans une future version.
 
     # --- Historique ---
     st.header("Historique des prédictions")
@@ -44,6 +43,5 @@ try:
         hide_index=True,
     )
 
-except Exception as e:
-    st.error(f"Erreur lors de la lecture de la base de données : {e}")
-    st.warning("Avez-vous déjà fait une prédiction ? L'historique est peut-être vide.")
+except Exception:
+    st.warning("La base de données de l'historique est vide ou n'a pas pu être lue. Faites une prédiction pour commencer.")
