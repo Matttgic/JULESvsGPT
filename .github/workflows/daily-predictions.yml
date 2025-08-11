@@ -1,0 +1,25 @@
+# name: Daily Predictions
+
+on:
+  schedule:
+    - cron: '0 8 * * *'  # Tous les jours à 8h UTC
+
+jobs:
+  generate-predictions:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    - name: Setup Python
+      uses: actions/setup-python@v3
+      with:
+        python-version: 3.9
+        
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        
+    - name: Generate predictions
+      env:
+        API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+      run: python daily_predictions.py
