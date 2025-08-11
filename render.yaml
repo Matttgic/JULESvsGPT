@@ -5,7 +5,7 @@ services:
     region: frankfurt # Ou 'oregon', selon la proximité des utilisateurs
     plan: free # Utilise le plan gratuit de Render
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn app:app"
+    startCommand: "gunicorn --worker-tmp-dir /dev/shm app:app"
     envVars:
       - key: API_FOOTBALL_KEY
         sync: false # La clé doit être ajoutée manuellement dans le dashboard Render
