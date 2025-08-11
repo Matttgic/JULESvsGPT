@@ -15,7 +15,3 @@ BASE_URL = f"https://{API_HOST}/v3"
 
 # ID du bookmaker à utiliser pour les cotes (Bet365)
 BOOKMAKER_ID = 8
-
-# Saison actuelle (par défaut, l'année en cours)
-# L'API utilise des années pour représenter les saisons (ex: 2023 pour la saison 2023/2024)
-CURRENT_SEASON = 2024

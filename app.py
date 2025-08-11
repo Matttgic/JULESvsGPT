@@ -4,7 +4,7 @@ from flask import Flask, render_template, request, json
 from datetime import datetime
 import api_client
 import prediction_engine
-from config import CURRENT_SEASON, BOOKMAKER_ID
+from config import BOOKMAKER_ID
 
 app = Flask(__name__)
 
@@ -52,8 +52,19 @@ def index():
 def show_fixtures():
     league_id = request.form['league_id']
     date_str = request.form['date']
-    fixtures_data = api_client.get_fixtures_for_date(date_str, league_id, CURRENT_SEASON)
-    fixtures = fixtures_data.get('response', [])
+
+    # Calcule la saison dynamiquement à partir de la date
+    # Si le mois est avant juillet, on considère que c'est la fin de la saison précédente
+    # (ex: mai 2024 fait partie de la saison 2023)
+    match_date = datetime.strptime(date_str, '%Y-%m-%d')
+    season = match_date.year - 1 if match_date.month < 7 else match_date.year
+
+    fixtures_data = api_client.get_fixtures_for_date(date_str, league_id, season)
+
+    fixtures = []
+    if fixtures_data and fixtures_data.get('response'):
+        fixtures = fixtures_data['response']
+
     return render_template('fixtures.html', fixtures=fixtures, date=date_str)
 
 @app.route('/result', methods=['POST'])
