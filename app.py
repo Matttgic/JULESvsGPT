@@ -1,6 +1,8 @@
 import streamlit as st
 from datetime import datetime
 import pandas as pd
+import api_client
+import prediction_engine
 
 # Pour l'instant, on garde la liste des ligues ici.
 # On pourrait la déplacer ou la charger depuis une source externe plus tard.
@@ -47,7 +49,6 @@ def main():
         season = match_date.year - 1 if match_date.month < 7 else match_date.year
 
         with st.spinner(f"Recherche des matchs pour le {date_str}..."):
-            import api_client
             fixtures_data = api_client.get_fixtures_for_date(date_str, league_id, season)
 
             if fixtures_data and fixtures_data.get('response'):
@@ -85,7 +86,6 @@ def main():
 
                 # Bouton de prédiction
                 if st.button("Lancer la prédiction", key=f"predict_{fixture['fixture']['id']}"):
-                    import prediction_engine
                     with st.spinner("Analyse du match en cours..."):
                         prediction, analysis_logs = prediction_engine.predict_match(fixture)
                         odds_data = api_client.get_odds(fixture['fixture']['id'], 8) # 8 = Bet365
