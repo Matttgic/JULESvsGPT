@@ -1,14 +1,16 @@
 
 import streamlit as st
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 import api_client
 import prediction_engine
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
+import json
+import os
+import hashlib
 
 # --- CONFIGURATION ---
-# Liste complète de tous les championnats
 ALL_LEAGUES = {
     "UEFA Champions League": 2,
     "UEFA Europa League": 3,
@@ -97,6 +99,10 @@ ALL_LEAGUES = {
     "FIFA Club World Cup - Play-In": 1186
 }
 
+# --- CACHE CONFIGURATION ---
+CACHE_FILE = "predictions_cache.json"
+CACHE_DURATION_HOURS = 6  # Cache valide pendant 6 heures
+
 # --- DATABASE ---
 @st.cache_resource
 def get_db_engine():
@@ -121,10 +127,52 @@ def init_db(engine):
         """))
         connection.commit()
 
+# --- CACHE FUNCTIONS ---
+def get_cache_key():
+    """Génère une clé de cache basée sur la date du jour."""
+    today_str = datetime.today().strftime('%Y-%m-%d')
+    return hashlib.md5(today_str.encode()).hexdigest()
+
+def load_cache():
+    """Charge le cache depuis le fichier."""
+    if not os.path.exists(CACHE_FILE):
+        return None
+    
+    try:
+        with open(CACHE_FILE, 'r', encoding='utf-8') as f:
+            cache_data = json.load(f)
+        
+        # Vérifier si le cache est encore valide
+        cache_time = datetime.fromisoformat(cache_data['timestamp'])
+        if datetime.now() - cache_time > timedelta(hours=CACHE_DURATION_HOURS):
+            return None
+        
+        # Vérifier si c'est le même jour
+        cache_key = cache_data.get('cache_key')
+        if cache_key != get_cache_key():
+            return None
+            
+        return cache_data
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du cache: {e}")
+        return None
+
+def save_cache(data):
+    """Sauvegarde les données dans le cache."""
+    try:
+        cache_data = {
+            'timestamp': datetime.now().isoformat(),
+            'cache_key': get_cache_key(),
+            'data': data
+        }
+        with open(CACHE_FILE, 'w', encoding='utf-8') as f:
+            json.dump(cache_data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        st.error(f"Erreur lors de la sauvegarde du cache: {e}")
+
 # --- API & DATA ---
-@st.cache_data(ttl=3600)
 def load_fixtures_today():
-    """Charge les matchs du jour pour tous les championnats et les met en cache."""
+    """Charge les matchs du jour pour tous les championnats."""
     today_str = datetime.today().strftime('%Y-%m-%d')
     all_fixtures = []
     match_date = datetime.strptime(today_str, '%Y-%m-%d')
@@ -136,7 +184,6 @@ def load_fixtures_today():
             if fixtures_data and fixtures_data.get('response'):
                 all_fixtures.extend(fixtures_data['response'])
         except Exception as e:
-            # Continue même si une ligue échoue
             continue
     
     return all_fixtures
@@ -165,6 +212,50 @@ def get_prediction_and_odds(fixture):
     except Exception as e:
         return "Erreur de prédiction", None, [f"Erreur: {str(e)}"]
 
+def process_all_fixtures():
+    """Traite tous les matchs et génère les prédictions."""
+    fixtures_today = load_fixtures_today()
+    
+    if not fixtures_today:
+        return {}
+    
+    processed_data = {}
+    total_fixtures = len(fixtures_today)
+    
+    # Progress bar
+    progress_bar = st.progress(0)
+    progress_text = st.empty()
+    
+    for i, fixture in enumerate(fixtures_today):
+        fixture_id = fixture['fixture']['id']
+        league_name = fixture['league']['name']
+        home_team = fixture['teams']['home']['name']
+        away_team = fixture['teams']['away']['name']
+        
+        # Mise à jour de la progress bar
+        progress = (i + 1) / total_fixtures
+        progress_bar.progress(progress)
+        progress_text.text(f"Traitement des matchs: {i + 1}/{total_fixtures} - {home_team} vs {away_team}")
+        
+        # Génération de la prédiction
+        prediction, odds, analysis_logs = get_prediction_and_odds(fixture)
+        
+        # Organisation par ligue
+        if league_name not in processed_data:
+            processed_data[league_name] = []
+        
+        processed_data[league_name].append({
+            'fixture': fixture,
+            'prediction': prediction,
+            'odds': odds,
+            'analysis_logs': analysis_logs
+        })
+    
+    progress_bar.empty()
+    progress_text.empty()
+    
+    return processed_data
+
 def save_prediction_to_db(engine, fixture, prediction, odds):
     """Sauvegarde une prédiction en base de données."""
     if odds and 'N/A' not in odds.values():
@@ -186,6 +277,67 @@ def save_prediction_to_db(engine, fixture, prediction, odds):
         except Exception as e:
             st.error(f"Erreur lors de la sauvegarde: {str(e)}")
 
+# --- DISPLAY FUNCTIONS ---
+def display_matches(processed_data, engine):
+    """Affiche tous les matchs avec leurs prédictions."""
+    total_matches = sum(len(fixtures) for fixtures in processed_data.values())
+    st.success(f"{total_matches} matchs trouvés avec prédictions en cache !")
+    
+    for league_name, fixtures_data in processed_data.items():
+        st.subheader(f"🏆 {league_name}")
+        
+        for match_data in fixtures_data:
+            fixture = match_data['fixture']
+            prediction = match_data['prediction']
+            odds = match_data['odds']
+            analysis_logs = match_data['analysis_logs']
+            
+            home_team = fixture['teams']['home']['name']
+            away_team = fixture['teams']['away']['name']
+            
+            # Container pour chaque match
+            with st.container():
+                col1, col2, col3, col4, col5 = st.columns([2, 1, 2, 2, 2])
+                
+                with col1:
+                    st.image(fixture['teams']['home']['logo'], width=50)
+                    st.write(f"**{home_team}**")
+                
+                with col2:
+                    st.write("**VS**")
+                    match_time = datetime.fromtimestamp(fixture['fixture']['timestamp']).strftime('%H:%M')
+                    st.write(f"🕒 {match_time}")
+                
+                with col3:
+                    st.image(fixture['teams']['away']['logo'], width=50)
+                    st.write(f"**{away_team}**")
+                
+                with col4:
+                    st.write("**🔮 Prédiction:**")
+                    if "Erreur" in prediction:
+                        st.error(prediction)
+                    else:
+                        st.success(prediction)
+                
+                with col5:
+                    st.write("**💰 Cotes:**")
+                    if odds and 'N/A' not in odds.values():
+                        st.write(f"1: {odds['home']}")
+                        st.write(f"X: {odds['draw']}")
+                        st.write(f"2: {odds['away']}")
+                        
+                        # Sauvegarder en base
+                        save_prediction_to_db(engine, fixture, prediction, odds)
+                    else:
+                        st.write("Non disponibles")
+                
+                st.write(f"**📍 {fixture['fixture']['venue']['name']}, {fixture['fixture']['venue']['city']}**")
+                
+                if st.checkbox(f"Voir l'analyse détaillée", key=f"analysis_{fixture['fixture']['id']}"):
+                    st.text_area("Logs d'analyse", value="\n".join(analysis_logs), height=100, key=f"logs_{fixture['fixture']['id']}")
+                
+                st.divider()
+
 # --- MAIN APP ---
 def main():
     st.set_page_config(page_title="Jules' Football Predictor", page_icon="⚽", layout="wide")
@@ -196,84 +348,38 @@ def main():
     st.title("🔮 Jules' Football Predictor")
     st.header(f"Matchs du Jour avec Prédictions ({datetime.today().strftime('%d/%m/%Y')})")
 
-    with st.spinner("Chargement des matchs et génération des prédictions..."):
-        try:
-            fixtures_today = load_fixtures_today()
-        except Exception as e:
-            st.error(f"Erreur lors de la récupération des matchs. La clé API est-elle correcte ?\n\n{e}")
-            return
-
-        if not fixtures_today:
-            st.warning("Aucun match trouvé pour aujourd'hui.")
-            return
-
-        st.success(f"{len(fixtures_today)} matchs trouvés dans tous les championnats.")
-
-        # Grouper les matchs par ligue pour une meilleure organisation
-        fixtures_by_league = {}
-        for fixture in fixtures_today:
-            league_name = fixture['league']['name']
-            if league_name not in fixtures_by_league:
-                fixtures_by_league[league_name] = []
-            fixtures_by_league[league_name].append(fixture)
-
-        # Afficher les matchs groupés par ligue
-        for league_name, fixtures in fixtures_by_league.items():
-            st.subheader(f"🏆 {league_name}")
-            
-            for fixture in fixtures:
-                home_team = fixture['teams']['home']['name']
-                away_team = fixture['teams']['away']['name']
+    # Tentative de chargement du cache
+    cache_data = load_cache()
+    
+    if cache_data:
+        # Cache valide trouvé
+        st.info(f"📦 Prédictions chargées depuis le cache (dernière mise à jour: {datetime.fromisoformat(cache_data['timestamp']).strftime('%H:%M:%S')})")
+        display_matches(cache_data['data'], engine)
+        
+        # Option pour forcer le rechargement
+        if st.button("🔄 Forcer le rechargement des prédictions"):
+            st.experimental_rerun()
+    else:
+        # Pas de cache valide, on génère les prédictions
+        st.warning("⏳ Aucun cache valide trouvé. Génération des prédictions en cours...")
+        
+        with st.spinner("Chargement des matchs et génération des prédictions..."):
+            try:
+                processed_data = process_all_fixtures()
                 
-                # Container pour chaque match
-                match_container = st.container()
-                with match_container:
-                    # En-tête du match
-                    col1, col2, col3, col4, col5 = st.columns([2, 1, 2, 2, 2])
-                    
-                    with col1:
-                        st.image(fixture['teams']['home']['logo'], width=50)
-                        st.write(f"**{home_team}**")
-                    
-                    with col2:
-                        st.write("**VS**")
-                        match_time = datetime.fromtimestamp(fixture['fixture']['timestamp']).strftime('%H:%M')
-                        st.write(f"🕒 {match_time}")
-                    
-                    with col3:
-                        st.image(fixture['teams']['away']['logo'], width=50)
-                        st.write(f"**{away_team}**")
-                    
-                    # Génération automatique de la prédiction
-                    prediction, odds, analysis_logs = get_prediction_and_odds(fixture)
-                    
-                    with col4:
-                        st.write("**🔮 Prédiction:**")
-                        if "Erreur" in prediction:
-                            st.error(prediction)
-                        else:
-                            st.success(prediction)
-                    
-                    with col5:
-                        st.write("**💰 Cotes:**")
-                        if odds and 'N/A' not in odds.values():
-                            st.write(f"1: {odds['home']}")
-                            st.write(f"X: {odds['draw']}")
-                            st.write(f"2: {odds['away']}")
-                            
-                            # Sauvegarder en base
-                            save_prediction_to_db(engine, fixture, prediction, odds)
-                        else:
-                            st.write("Non disponibles")
-                    
-                    # Informations supplémentaires du match
-                    st.write(f"**📍 {fixture['fixture']['venue']['name']}, {fixture['fixture']['venue']['city']}**")
-                    
-                    # Option pour voir le détail de l'analyse (optionnel)
-                    if st.checkbox(f"Voir l'analyse détaillée", key=f"analysis_{fixture['fixture']['id']}"):
-                        st.text_area("Logs d'analyse", value="\n".join(analysis_logs), height=100, key=f"logs_{fixture['fixture']['id']}")
-                    
-                    st.divider()  # Séparateur entre les matchs
+                if not processed_data:
+                    st.warning("Aucun match trouvé pour aujourd'hui.")
+                    return
+                
+                # Sauvegarder dans le cache
+                save_cache(processed_data)
+                st.success("✅ Prédictions générées et mises en cache !")
+                
+                # Afficher les résultats
+                display_matches(processed_data, engine)
+                
+            except Exception as e:
+                st.error(f"Erreur lors de la génération des prédictions: {e}")
 
 if __name__ == "__main__":
     main()
