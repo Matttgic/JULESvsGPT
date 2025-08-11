@@ -137,10 +137,54 @@ def load_fixtures_today():
                 all_fixtures.extend(fixtures_data['response'])
         except Exception as e:
             # Continue même si une ligue échoue
-            st.warning(f"Erreur pour la ligue {league_id}: {str(e)}")
             continue
     
     return all_fixtures
+
+def get_prediction_and_odds(fixture):
+    """Génère la prédiction et récupère les cotes pour un match."""
+    try:
+        prediction, analysis_logs = prediction_engine.predict_match(fixture)
+        odds_data = api_client.get_odds(fixture['fixture']['id'], 8)
+        
+        parsed_odds = None
+        if odds_data and odds_data.get('response'):
+            try:
+                bookmaker = odds_data['response'][0]['bookmakers'][0]
+                bet = next((b for b in bookmaker['bets'] if b['name'] == 'Match Winner'), None)
+                if bet:
+                    parsed_odds = {
+                        'home': next((o['odd'] for o in bet['values'] if o['value'] == 'Home'), 'N/A'),
+                        'draw': next((o['odd'] for o in bet['values'] if o['value'] == 'Draw'), 'N/A'),
+                        'away': next((o['odd'] for o in bet['values'] if o['value'] == 'Away'), 'N/A'),
+                    }
+            except (IndexError, KeyError):
+                pass
+        
+        return prediction, parsed_odds, analysis_logs
+    except Exception as e:
+        return "Erreur de prédiction", None, [f"Erreur: {str(e)}"]
+
+def save_prediction_to_db(engine, fixture, prediction, odds):
+    """Sauvegarde une prédiction en base de données."""
+    if odds and 'N/A' not in odds.values():
+        try:
+            Session = sessionmaker(bind=engine)
+            with Session() as session:
+                home_team = fixture['teams']['home']['name']
+                away_team = fixture['teams']['away']['name']
+                session.execute(
+                    text('INSERT OR IGNORE INTO predictions (fixture_id, prediction_ts, match_desc, predicted_outcome, odds_home, odds_draw, odds_away) VALUES (:fid, :ts, :desc, :pred, :oh, :od, :oa)'),
+                    [{
+                        "fid": fixture['fixture']['id'], "ts": datetime.now(),
+                        "desc": f"{home_team} vs {away_team}", "pred": prediction,
+                        "oh": float(odds['home']), "od": float(odds['draw']),
+                        "oa": float(odds['away'])
+                    }]
+                )
+                session.commit()
+        except Exception as e:
+            st.error(f"Erreur lors de la sauvegarde: {str(e)}")
 
 # --- MAIN APP ---
 def main():
@@ -150,98 +194,86 @@ def main():
     init_db(engine)
 
     st.title("🔮 Jules' Football Predictor")
-    st.header(f"Matchs du Jour ({datetime.today().strftime('%d/%m/%Y')})")
+    st.header(f"Matchs du Jour avec Prédictions ({datetime.today().strftime('%d/%m/%Y')})")
 
-    try:
-        fixtures_today = load_fixtures_today()
-    except Exception as e:
-        st.error(f"Erreur lors de la récupération des matchs. La clé API est-elle correcte ?\n\n{e}")
-        return
+    with st.spinner("Chargement des matchs et génération des prédictions..."):
+        try:
+            fixtures_today = load_fixtures_today()
+        except Exception as e:
+            st.error(f"Erreur lors de la récupération des matchs. La clé API est-elle correcte ?\n\n{e}")
+            return
 
-    if not fixtures_today:
-        st.warning("Aucun match trouvé pour aujourd'hui.")
-        return
+        if not fixtures_today:
+            st.warning("Aucun match trouvé pour aujourd'hui.")
+            return
 
-    st.success(f"{len(fixtures_today)} matchs trouvés dans tous les championnats.")
+        st.success(f"{len(fixtures_today)} matchs trouvés dans tous les championnats.")
 
-    # Grouper les matchs par ligue pour une meilleure organisation
-    fixtures_by_league = {}
-    for fixture in fixtures_today:
-        league_name = fixture['league']['name']
-        if league_name not in fixtures_by_league:
-            fixtures_by_league[league_name] = []
-        fixtures_by_league[league_name].append(fixture)
+        # Grouper les matchs par ligue pour une meilleure organisation
+        fixtures_by_league = {}
+        for fixture in fixtures_today:
+            league_name = fixture['league']['name']
+            if league_name not in fixtures_by_league:
+                fixtures_by_league[league_name] = []
+            fixtures_by_league[league_name].append(fixture)
 
-    # Afficher les matchs groupés par ligue
-    for league_name, fixtures in fixtures_by_league.items():
-        st.subheader(f"🏆 {league_name} ({len(fixtures)} matchs)")
-        
-        for fixture in fixtures:
-            home_team = fixture['teams']['home']['name']
-            away_team = fixture['teams']['away']['name']
+        # Afficher les matchs groupés par ligue
+        for league_name, fixtures in fixtures_by_league.items():
+            st.subheader(f"🏆 {league_name}")
             
-            with st.expander(f"⚽ {home_team} vs {away_team}"):
-                col1, col2, col3 = st.columns([2, 1, 2])
-                with col1:
-                    st.image(fixture['teams']['home']['logo'], width=60)
-                    st.write(f"**{home_team}**")
-                with col2:
-                    st.write("vs")
-                with col3:
-                    st.image(fixture['teams']['away']['logo'], width=60)
-                    st.write(f"**{away_team}**")
+            for fixture in fixtures:
+                home_team = fixture['teams']['home']['name']
+                away_team = fixture['teams']['away']['name']
                 
-                st.write(f"**Stade :** {fixture['fixture']['venue']['name']}, {fixture['fixture']['venue']['city']}")
-                st.write(f"**Heure :** {datetime.fromtimestamp(fixture['fixture']['timestamp']).strftime('%H:%M')}")
-                
-                if st.button("Lancer la prédiction", key=f"predict_{fixture['fixture']['id']}"):
-                    with st.spinner("Analyse du match en cours..."):
-                        prediction, analysis_logs = prediction_engine.predict_match(fixture)
-                        odds_data = api_client.get_odds(fixture['fixture']['id'], 8)
-                        
-                        st.subheader("Résultats de l'analyse")
-                        st.success(f"**Prédiction : {prediction}**")
-
-                        with st.expander("Voir le détail de l'analyse"):
-                            for log in analysis_logs:
-                                st.text(log)
-
-                        parsed_odds = None
-                        if odds_data and odds_data.get('response'):
-                            try:
-                                bookmaker = odds_data['response'][0]['bookmakers'][0]
-                                bet = next((b for b in bookmaker['bets'] if b['name'] == 'Match Winner'), None)
-                                if bet:
-                                    parsed_odds = {
-                                        'home': next((o['odd'] for o in bet['values'] if o['value'] == 'Home'), 'N/A'),
-                                        'draw': next((o['odd'] for o in bet['values'] if o['value'] == 'Draw'), 'N/A'),
-                                        'away': next((o['odd'] for o in bet['values'] if o['value'] == 'Away'), 'N/A'),
-                                    }
-                            except (IndexError, KeyError):
-                                pass
-                        
-                        st.write("**Cotes (Bet365) :**")
-                        if parsed_odds and 'N/A' not in parsed_odds.values():
-                            c1, c2, c3 = st.columns(3)
-                            c1.metric(label=f"Victoire {home_team}", value=parsed_odds['home'])
-                            c2.metric(label="Match Nul", value=parsed_odds['draw'])
-                            c3.metric(label=f"Victoire {away_team}", value=parsed_odds['away'])
-                            
-                            Session = sessionmaker(bind=engine)
-                            with Session() as session:
-                                session.execute(
-                                    text('INSERT OR IGNORE INTO predictions (fixture_id, prediction_ts, match_desc, predicted_outcome, odds_home, odds_draw, odds_away) VALUES (:fid, :ts, :desc, :pred, :oh, :od, :oa)'),
-                                    [{
-                                        "fid": fixture['fixture']['id'], "ts": datetime.now(),
-                                        "desc": f"{home_team} vs {away_team}", "pred": prediction,
-                                        "oh": float(parsed_odds['home']), "od": float(parsed_odds['draw']),
-                                        "oa": float(parsed_odds['away'])
-                                    }]
-                                )
-                                session.commit()
-                            st.toast("Prédiction sauvegardée dans l'historique !")
+                # Container pour chaque match
+                match_container = st.container()
+                with match_container:
+                    # En-tête du match
+                    col1, col2, col3, col4, col5 = st.columns([2, 1, 2, 2, 2])
+                    
+                    with col1:
+                        st.image(fixture['teams']['home']['logo'], width=50)
+                        st.write(f"**{home_team}**")
+                    
+                    with col2:
+                        st.write("**VS**")
+                        match_time = datetime.fromtimestamp(fixture['fixture']['timestamp']).strftime('%H:%M')
+                        st.write(f"🕒 {match_time}")
+                    
+                    with col3:
+                        st.image(fixture['teams']['away']['logo'], width=50)
+                        st.write(f"**{away_team}**")
+                    
+                    # Génération automatique de la prédiction
+                    prediction, odds, analysis_logs = get_prediction_and_odds(fixture)
+                    
+                    with col4:
+                        st.write("**🔮 Prédiction:**")
+                        if "Erreur" in prediction:
+                            st.error(prediction)
                         else:
-                            st.warning("Cotes non disponibles pour ce match.")
+                            st.success(prediction)
+                    
+                    with col5:
+                        st.write("**💰 Cotes:**")
+                        if odds and 'N/A' not in odds.values():
+                            st.write(f"1: {odds['home']}")
+                            st.write(f"X: {odds['draw']}")
+                            st.write(f"2: {odds['away']}")
+                            
+                            # Sauvegarder en base
+                            save_prediction_to_db(engine, fixture, prediction, odds)
+                        else:
+                            st.write("Non disponibles")
+                    
+                    # Informations supplémentaires du match
+                    st.write(f"**📍 {fixture['fixture']['venue']['name']}, {fixture['fixture']['venue']['city']}**")
+                    
+                    # Option pour voir le détail de l'analyse (optionnel)
+                    if st.checkbox(f"Voir l'analyse détaillée", key=f"analysis_{fixture['fixture']['id']}"):
+                        st.text_area("Logs d'analyse", value="\n".join(analysis_logs), height=100, key=f"logs_{fixture['fixture']['id']}")
+                    
+                    st.divider()  # Séparateur entre les matchs
 
 if __name__ == "__main__":
     main()
