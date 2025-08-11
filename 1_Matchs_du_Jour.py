@@ -16,57 +16,64 @@ MAJOR_LEAGUES = {
     "UEFA Europa League": 3,
 }
 
+# Initialisation de la connexion à la base de données
+conn = st.connection("predictions_db", type="sql", url="sqlite:///predictions.db")
+
+# Fonction pour créer la table si elle n'existe pas
+def init_db():
+    with conn.session as s:
+        s.execute("""
+            CREATE TABLE IF NOT EXISTS predictions (
+                id INTEGER PRIMARY KEY,
+                prediction_ts TIMESTAMP,
+                fixture_id INTEGER,
+                match_desc TEXT,
+                predicted_outcome TEXT,
+                odds_home REAL,
+                odds_draw REAL,
+                odds_away REAL,
+                status TEXT DEFAULT 'PENDING'
+            )
+        """)
+
+# Fonction pour charger les matchs du jour
+@st.cache_data(ttl=3600) # Cache les résultats pour 1 heure
+def load_fixtures_today():
+    today_str = datetime.today().strftime('%Y-%m-%d')
+    all_fixtures = []
+
+    # Logique pour calculer la saison
+    match_date = datetime.strptime(today_str, '%Y-%m-%d')
+    season = match_date.year - 1 if match_date.month < 7 else match_date.year
+
+    for league_name, league_id in MAJOR_LEAGUES.items():
+        fixtures_data = api_client.get_fixtures_for_date(today_str, league_id, season)
+        if fixtures_data and fixtures_data.get('response'):
+            all_fixtures.extend(fixtures_data['response'])
+    return all_fixtures
+
 def main():
     st.set_page_config(page_title="Jules' Football Predictor", page_icon="⚽")
 
+    # Initialise la base de données au démarrage
+    init_db()
+
     st.title("🔮 Jules' Football Predictor")
-    st.write("Sélectionnez un championnat et une date pour voir les matchs et obtenir des prédictions.")
+    st.header("Matchs du Jour")
 
-    # --- Section de sélection ---
-    st.header("1. Choisissez un match")
+    try:
+        fixtures_today = load_fixtures_today()
+    except Exception as e:
+        st.error(f"Erreur lors de la récupération des matchs. La clé API est-elle correcte ?\n\n{e}")
+        return
 
-    col1, col2 = st.columns(2)
+    if not fixtures_today:
+        st.warning("Aucun match trouvé dans les grands championnats pour aujourd'hui.")
+        return
 
-    with col1:
-        league_name = st.selectbox(
-            "Championnat",
-            options=list(MAJOR_LEAGUES.keys())
-        )
+    st.success(f"{len(fixtures_today)} matchs trouvés pour aujourd'hui.")
 
-    with col2:
-        selected_date = st.date_input(
-            "Date",
-            value=datetime.today(),
-            min_value=datetime(2020, 1, 1)
-        )
-
-    league_id = MAJOR_LEAGUES[league_name]
-    date_str = selected_date.strftime('%Y-%m-%d')
-
-    if st.button("Voir les matchs"):
-        # Logique pour calculer la saison
-        match_date = datetime.strptime(date_str, '%Y-%m-%d')
-        season = match_date.year - 1 if match_date.month < 7 else match_date.year
-
-        with st.spinner(f"Recherche des matchs pour le {date_str}..."):
-            fixtures_data = api_client.get_fixtures_for_date(date_str, league_id, season)
-
-            if fixtures_data and fixtures_data.get('response'):
-                fixtures = fixtures_data['response']
-                st.session_state.fixtures = fixtures # Sauvegarde dans l'état de la session
-            else:
-                fixtures = []
-                st.session_state.fixtures = []
-
-        if not st.session_state.fixtures:
-            st.warning("Aucun match trouvé pour cette date et ce championnat.")
-        else:
-            st.success(f"{len(st.session_state.fixtures)} matchs trouvés !")
-
-    # --- Section d'affichage des matchs ---
-    if 'fixtures' in st.session_state and st.session_state.fixtures:
-        st.header("2. Résultats de la recherche")
-        for fixture in st.session_state.fixtures:
+    for fixture in fixtures_today:
             home_team = fixture['teams']['home']['name']
             away_team = fixture['teams']['away']['name']
 
@@ -121,6 +128,23 @@ def main():
                             col1.metric(label=f"Victoire {home_team}", value=parsed_odds['home'])
                             col2.metric(label="Match Nul", value=parsed_odds['draw'])
                             col3.metric(label=f"Victoire {away_team}", value=parsed_odds['away'])
+
+                            # Sauvegarde de la prédiction en base de données
+                            with conn.session as s:
+                                s.execute(
+                                    'INSERT INTO predictions (prediction_ts, fixture_id, match_desc, predicted_outcome, odds_home, odds_draw, odds_away) VALUES (:ts, :fid, :desc, :pred, :oh, :od, :oa)',
+                                    params=dict(
+                                        ts=datetime.now(),
+                                        fid=fixture['fixture']['id'],
+                                        desc=f"{home_team} vs {away_team}",
+                                        pred=prediction,
+                                        oh=float(parsed_odds['home']),
+                                        od=float(parsed_odds['draw']),
+                                        oa=float(parsed_odds['away'])
+                                    )
+                                )
+                                s.commit()
+                            st.toast("Prédiction sauvegardée dans l'historique !")
                         else:
                             st.warning("Cotes non disponibles pour ce match.")
 
