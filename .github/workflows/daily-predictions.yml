@@ -45,8 +45,9 @@ jobs:
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git add data/predictions/*.csv
-        git add daily_predictions.log
+        
+        # Ajouter seulement les fichiers CSV (pas les logs)
+        git add data/predictions/*.csv 2>/dev/null || echo "Aucun fichier CSV à ajouter"
         
         # Vérifier s'il y a des changements à committer
         if git diff --staged --quiet; then
