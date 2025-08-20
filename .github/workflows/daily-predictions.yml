@@ -1,25 +1,77 @@
-# name: Daily Predictions
+# .github/workflows/daily-predictions.yml
+name: Daily Football Predictions
 
 on:
   schedule:
-    - cron: '0 8 * * *'  # Tous les jours à 8h UTC
+    - cron: '0 6 * * *'  # Tous les jours à 6h UTC (avant les matchs)
+  workflow_dispatch:  # Permet de lancer manuellement
 
 jobs:
   generate-predictions:
     runs-on: ubuntu-latest
     
     steps:
-    - uses: actions/checkout@v3
-    - name: Setup Python
-      uses: actions/setup-python@v3
+    # Étape 1: Checkout du code
+    - name: Checkout repository
+      uses: actions/checkout@v4
       with:
-        python-version: 3.9
-        
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    # Étape 2: Configuration de Python
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    # Étape 3: Installation des dépendances
     - name: Install dependencies
       run: |
-        pip install -r requirements.txt
-        
-    - name: Generate predictions
+        python -m pip install --upgrade pip
+        pip install requests pandas streamlit sqlalchemy python-dotenv
+    
+    # Étape 4: Création du dossier pour les prédictions
+    - name: Create predictions directory
+      run: mkdir -p data/predictions
+    
+    # Étape 5: Génération des prédictions quotidiennes
+    - name: Generate daily predictions
       env:
-        API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
-      run: python daily_predictions.py
+        API_FOOTBALL_KEY: ${{ secrets.RAPIDAPI_KEY }}
+      run: |
+        python daily_predictions_generator.py
+    
+    # Étape 6: Commit et push des fichiers de prédictions
+    - name: Commit and push predictions
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add data/predictions/*.csv
+        git add daily_predictions.log
+        
+        # Vérifier s'il y a des changements à committer
+        if git diff --staged --quiet; then
+          echo "✅ Aucune nouvelle prédiction à sauvegarder"
+        else
+          git commit -m "🔮 Prédictions quotidiennes - $(date '+%Y-%m-%d')"
+          git push
+          echo "✅ Prédictions sauvegardées"
+        fi
+    
+    # Étape 7: Upload des logs en cas d'erreur
+    - name: Upload logs on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: predictions-logs
+        path: daily_predictions.log
+    
+    # Étape 8: Résumé
+    - name: Display summary
+      run: |
+        echo "=== RÉSUMÉ DES PRÉDICTIONS ==="
+        echo "Date: $(date)"
+        echo "Fichiers générés:"
+        ls -la data/predictions/ || echo "Aucun fichier de prédiction"
+        echo ""
+        echo "Dernières lignes du log:"
+        tail -10 daily_predictions.log 2>/dev/null || echo "Aucun log trouvé"
