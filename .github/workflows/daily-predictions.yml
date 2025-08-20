@@ -36,7 +36,7 @@ jobs:
     # Étape 5: Génération des prédictions quotidiennes
     - name: Generate daily predictions
       env:
-        API_FOOTBALL_KEY: ${{ secrets.RAPIDAPI_KEY }}
+        RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
       run: |
         python daily_predictions_generator.py
     
