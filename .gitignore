@@ -4,10 +4,16 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Logs
+# Logs (sauf les logs de workflow qui peuvent être utiles)
 *.log
+!daily_predictions.log
+!football_*.log
 
 # Environment
 .env
 venv/
 env/
+
+# Data temporaire (optionnel)
+# data/temp/
+# cache/
