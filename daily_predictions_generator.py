@@ -411,10 +411,10 @@ def main():
     """Fonction principale"""
     import os
     
-    # Récupérer la clé API
-    api_key = os.environ.get('API_FOOTBALL_KEY')
+    # Récupérer la clé API (essayer les deux variables)
+    api_key = os.environ.get('RAPIDAPI_KEY') or os.environ.get('API_FOOTBALL_KEY')
     if not api_key:
-        logger.error("⚠️ Clé API_FOOTBALL_KEY non trouvée dans les variables d'environnement")
+        logger.error("⚠️ Clé API non trouvée. Vérifiez que RAPIDAPI_KEY ou API_FOOTBALL_KEY est définie dans les variables d'environnement")
         sys.exit(1)
     
     logger.info("✅ Clé API récupérée depuis les variables d'environnement")
@@ -424,4 +424,4 @@ def main():
     generator.run()
 
 if __name__ == "__main__":
-    main()
+    main() 
